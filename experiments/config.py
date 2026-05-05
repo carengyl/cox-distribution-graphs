@@ -1,43 +1,125 @@
 """
 Конфигурация экспериментов.
 """
+import numpy as np
 
-# Пример функции временной зависимости для утреннего часа пик
-def mu_morning(t: float):
-    hour = t % 24
-    if 7 <= hour <= 9:
-        return [0.3, 0.7]   # две фазы, низкие интенсивности -> большие задержки
-    elif 17 <= hour <= 19:
-        return [0.4, 0.8]
-    else:
-        return [1.0, 2.0]
+# --- Однородные распределения (интерфейс mu(t), p(t)) ---
 
-def p_morning(t: float):
-    # вероятность перехода постоянна
+def mu_static_exp(t: float):
+    return [1.0]
+
+def p_static_exp(t: float):
+    return []
+
+
+# --- Неоднородные распределения (интерфейс mu(u, v), p(u, v)) ---
+# Каждое ребро получает свои параметры — быстрый/медленный маршрут.
+
+_rng = np.random.RandomState(99)
+_edge_params_cache = {}
+
+def _get_edge_mu(u, v):
+    key = (u, v)
+    if key not in _edge_params_cache:
+        _edge_params_cache[key] = _rng.uniform(0.3, 3.0)
+    return _edge_params_cache[key]
+
+
+def mu_heterogeneous(u: float, v: float):
+    mu_val = _get_edge_mu(int(u), int(v))
+    return [mu_val]
+
+def p_heterogeneous(u: float, v: float):
+    return []
+
+
+def mu_heterogeneous_cox2(u: float, v: float):
+    mu_val = _get_edge_mu(int(u), int(v))
+    return [mu_val, mu_val * 1.5]
+
+def p_heterogeneous_cox2(u: float, v: float):
     return [0.6]
+
+
+# --- Зависящие от времени распределения ---
+# Два типа рёбер: «обычные» и «загруженные в час пик».
+# Загруженные рёбра в пик замедляются в 5-10 раз.
+
+def _is_rush_edge(u, v):
+    return (int(u) * 31 + int(v) * 17) % 7 == 0
+
+def _make_rush_mu(is_rush):
+    if is_rush:
+        return lambda t: [0.1] if 7 <= (t % 24) <= 10 else ([0.2] if 17 <= (t % 24) <= 20 else [1.5])
+    else:
+        return lambda t: [1.0]
+
+def _make_rush_p(is_rush):
+    return lambda t: []
+
+def mu_rush_hour(u: float, v: float):
+    is_rush = _is_rush_edge(u, v)
+    return _make_rush_mu(is_rush)
+
+def p_rush_hour(u: float, v: float):
+    is_rush = _is_rush_edge(u, v)
+    return _make_rush_p(is_rush)
+
+
+# Аналогично, но с 2 фазами и более сильным эффектом
+def _make_rush_mu2(is_rush):
+    if is_rush:
+        return lambda t: [0.08, 0.15] if 7 <= (t % 24) <= 10 else ([0.15, 0.3] if 17 <= (t % 24) <= 20 else [1.0, 2.0])
+    else:
+        return lambda t: [1.0, 2.0]
+
+def _make_rush_p2(is_rush):
+    if is_rush:
+        return lambda t: [0.5] if 7 <= (t % 24) <= 10 else [0.6]
+    else:
+        return lambda t: [0.6]
+
+def mu_rush_hour_cox2(u: float, v: float):
+    is_rush = _is_rush_edge(u, v)
+    return _make_rush_mu2(is_rush)
+
+def p_rush_hour_cox2(u: float, v: float):
+    is_rush = _is_rush_edge(u, v)
+    return _make_rush_p2(is_rush)
+
 
 # Параметры экспериментов
 EXPERIMENT_CONFIG = {
     'graph_sizes': [10, 20, 50],
     'topologies': ['random', 'grid'],
-    'random_edge_prob': 0.2,
+    'random_edge_prob': 0.3,
     'grid_rows': 5,
     'grid_cols': 5,
     'distributions': {
-        'static_exp': {   # экспоненциальное (1 фаза)
-            'mu': lambda t: [1.0],
-            'p': lambda t: []
+        'static_exp': {
+            'mu': mu_static_exp,
+            'p': p_static_exp
         },
-        'static_cox2': {  # Кокса 2 фазы
-            'mu': lambda t: [1.0, 2.0],
-            'p': lambda t: [0.7]
+        'heterogeneous': {
+            'mu': mu_heterogeneous,
+            'p': p_heterogeneous
         },
-        'morning_peak': { # зависит от времени
-            'mu': mu_morning,
-            'p': p_morning
+        'heterogeneous_cox2': {
+            'mu': mu_heterogeneous_cox2,
+            'p': p_heterogeneous_cox2
+        },
+        'rush_hour': {
+            'mu': mu_rush_hour,
+            'p': p_rush_hour,
+            'start_time': 8.0    # начинаем в час пик
+        },
+        'rush_hour_cox2': {
+            'mu': mu_rush_hour_cox2,
+            'p': p_rush_hour_cox2,
+            'start_time': 8.0
         }
     },
     'algorithms': ['dijkstra', 'adaptive_dijkstra', 'expected_dijkstra'],
-    'num_runs': 10,        # число прогонов для статистики
+    'num_runs': 10,
     'seed': 42
 }

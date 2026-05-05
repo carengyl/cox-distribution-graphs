@@ -17,7 +17,9 @@ from graph.factory import GraphFactory
 def run_experiments(config: Dict, output_dir: str = "results") -> str:
     """
     Запускает эксперименты и сохраняет результаты в CSV.
-    Возвращает путь к сохранённому файлу.
+
+    Каждый алгоритм находит путь и возвращает реальное время прохождения.
+    Для устойчивости результатов используем много независимых прогонов (num_runs).
     """
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -28,8 +30,7 @@ def run_experiments(config: Dict, output_dir: str = "results") -> str:
         for topo in config['topologies']:
             for dist_name, dist_params in config['distributions'].items():
                 for run in range(config['num_runs']):
-                    # Создаём граф
-                    seed = config['seed'] + run * 100  # для разнообразия
+                    seed = config['seed'] + run * 100
                     if topo == 'random':
                         graph = GraphFactory.create_random(
                             n=size,
@@ -48,21 +49,17 @@ def run_experiments(config: Dict, output_dir: str = "results") -> str:
                             seed=seed
                         )
 
-                    # Инициализируем веса в начальный момент времени (t=0)
+                    start_time = dist_params.get('start_time', 0.0)
+                    graph.current_time = start_time
                     graph.update_all_weights(0)
 
-                    # Выбираем случайные источник и цель (разные)
                     source, target = np.random.choice(graph.n, size=2, replace=False)
 
-                    # Для каждого алгоритма запускаем поиск
-                    for alg_name in config['algorithms']:
-                        # Создаём копию графа, чтобы алгоритмы не влияли друг на друга
-                        # Для простоты будем каждый раз создавать новый граф, но это дорого.
-                        # Вместо этого можно клонировать граф. Реализуем метод copy в Graph.
-                        # Здесь для краткости будем использовать один граф, но в реальности нужно копировать.
-                        # Оставим как заглушку.
+                    dijkstra_path = None
 
-                        # Вызов алгоритма
+                    for alg_name in config['algorithms']:
+                        graph_copy = graph.copy()
+
                         if alg_name == 'dijkstra':
                             alg = Dijkstra()
                         elif alg_name == 'adaptive_dijkstra':
@@ -72,24 +69,26 @@ def run_experiments(config: Dict, output_dir: str = "results") -> str:
                         else:
                             continue
 
-                        # Важно: для адаптивного алгоритма нужно передавать граф, но он его изменит.
-                        # Поэтому перед вызовом создадим копию графа.
-                        # Для простоты опустим копирование.
+                        time_taken, path = alg.find_path(graph_copy, source, target)
 
-                        # Здесь должен быть код клонирования графа.
-                        # Пока просто вызовем алгоритм, понимая, что состояние будет испорчено.
-                        time_taken, path = alg.find_path(graph, source, target)
+                        if alg_name == 'dijkstra':
+                            dijkstra_path = set(path) if path else set()
+
+                        path_set = set(path) if path else set()
+                        path_differs = path_set != dijkstra_path if dijkstra_path is not None else False
 
                         results.append({
                             'graph_size': size,
                             'topology': topo,
                             'distribution': dist_name,
                             'run': run,
-                            'source': source,
-                            'target': target,
+                            'source': int(source),
+                            'target': int(target),
                             'algorithm': alg_name,
                             'time': time_taken,
-                            'path_length': len(path) if path else 0
+                            'path_length': len(path) if path else 0,
+                            'path': '-'.join(map(str, path)) if path else '',
+                            'path_differs_from_dijkstra': path_differs
                         })
 
     df = pd.DataFrame(results)

@@ -1,14 +1,15 @@
 """
-Модификация Дейкстры, использующая математическое ожидание весов вместо текущих значений.
+Модификация Дейкстры, использующая математическое ожидание весов для планирования,
+затем симулирует реальный проход по найденному пути.
 """
 import heapq
 from typing import List, Tuple
 from graph.graph import Graph
 from .base import Algorithm
-from .utils import reconstruct_path
+from .utils import reconstruct_path, simulate_traversal
 
 class ExpectedDijkstra(Algorithm):
-    """Дейкстра на математических ожиданиях весов (не меняет граф)."""
+    """Дейкстра на математических ожиданиях весов."""
 
     def find_path(self, graph: Graph, source: int, target: int) -> Tuple[float, List[int]]:
         n = graph.n
@@ -25,7 +26,6 @@ class ExpectedDijkstra(Algorithm):
                 break
             for idx in graph.adj[u]:
                 edge = graph.edges[idx]
-                # используем математическое ожидание в текущий момент времени
                 w_mean = edge.distribution.mean(graph.current_time)
                 nd = d + w_mean
                 if nd < dist[edge.v]:
@@ -35,4 +35,7 @@ class ExpectedDijkstra(Algorithm):
 
         if dist[target] == float('inf'):
             return float('inf'), []
-        return dist[target], reconstruct_path(prev, source, target)
+
+        path = reconstruct_path(prev, source, target)
+        real_time = simulate_traversal(graph, path)
+        return real_time, path
