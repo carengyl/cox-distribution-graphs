@@ -119,7 +119,35 @@ EXPERIMENT_CONFIG = {
             'start_time': 8.0
         }
     },
-    'algorithms': ['dijkstra', 'adaptive_dijkstra', 'expected_dijkstra'],
+    'algorithms': ['dijkstra', 'adaptive_dijkstra', 'expected_dijkstra', 'astar'],
     'num_runs': 10,
     'seed': 42
 }
+
+def get_heuristic(topology, graph):
+    if topology == 'grid':
+        cols = EXPERIMENT_CONFIG['grid_cols']
+        def heuristic(graph, u, target):
+            ur, uc = divmod(u, cols)
+            tr, tc = divmod(target, cols)
+            return abs(ur - tr) + abs(uc - tc)
+        return heuristic
+    else:
+        # Для случайного графа используем эвристику на основе степени вершин
+        def heuristic(graph, u, target):
+            if u == target:
+                return 0.0
+            deg_u = len(graph.adj[u])
+            deg_t = len(graph.adj[target])
+            max_deg = max(len(adj) for adj in graph.adj) if graph.n > 0 else 1
+            # Общие соседи
+            neighbors_u = set(idx for idx in graph.adj[u])
+            neighbors_t = set(idx for idx in graph.adj[target])
+            common = len(neighbors_u & neighbors_t)
+            if common > 0:
+                # Ожидаемое минимальное время ребра (можно вычислить один раз)
+                min_mean = min(e.distribution.mean(graph.current_time) for e in graph.edges)
+                return 2.0 * min_mean
+            # Иначе – оценка на основе степени
+            return (deg_u + deg_t) / (2.0 * max_deg)
+        return heuristic

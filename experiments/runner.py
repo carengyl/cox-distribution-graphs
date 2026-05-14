@@ -11,7 +11,9 @@ import pandas as pd
 from algorithms.adaptive_dijkstra import AdaptiveDijkstra
 from algorithms.dijkstra import Dijkstra
 from algorithms.expected_dijkstra import ExpectedDijkstra
+from algorithms.astar import AStar
 from graph.factory import GraphFactory
+from experiments.config import get_heuristic
 
 
 def run_experiments(config: Dict, output_dir: str = "results") -> str:
@@ -66,6 +68,9 @@ def run_experiments(config: Dict, output_dir: str = "results") -> str:
                             alg = AdaptiveDijkstra()
                         elif alg_name == 'expected_dijkstra':
                             alg = ExpectedDijkstra()
+                        elif alg_name == 'astar':
+                            heuristic = get_heuristic(topo, graph_copy)
+                            alg = AStar(heuristic=heuristic)
                         else:
                             continue
 
